@@ -26,6 +26,14 @@ const congeSchema = new Schema({
     type: String,
     required: true,
   },
+  typeConge: {
+    type: String,
+    required: true,
+  },
+  hoursWorked: {
+    type: String,
+    required: true,
+  },
   verified: {
     type: Boolean,
     default: false,

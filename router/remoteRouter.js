@@ -1,9 +1,10 @@
+import { submitRemoteJob, verifierRemote ,getRemoteData} from "../controllers/remoteController.js";
 import express from "express";
-import remoteController from "../controllers/remoteController.js";
-// Créer un routeur Express pour gérer les demandes d'emploi à distance
-const remoteRouter = express.Router();
 
-// Route pour soumettre une nouvelle demande d'emploi à distance
-remoteRouter.post("/submit", remoteController.submitRemoteJob);
+const router = express.Router();
 
-export default remoteRouter;
+router.post("/submit", submitRemoteJob);
+router.post("/verify", verifierRemote);
+router.get("/getRemoteData", getRemoteData);
+
+export default router;

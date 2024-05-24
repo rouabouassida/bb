@@ -9,13 +9,21 @@ const remoteJobSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  date: {
-    type: String, // Vous pouvez utiliser un type de date approprié pour votre base de données
+  dateDebut: {
+    type: String,
+    required: true,
+  },
+  dateFin: {
+    type: String,
     required: true,
   },
   dateSoumission: {
     type: Date,
     default: Date.now,
+  },
+  verified: {
+    type: Boolean,
+    default: false,
   },
 });
 

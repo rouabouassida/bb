@@ -4,11 +4,42 @@ import moment from "moment";
 import Employee from "../models/Employee.js";
 import { sendNewConge } from "../helpers/sendEmail.js";
 
+// Fonction pour formater la date au format "jj/mm/aaaa"
+const formatDate = (now) => {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${day}/${month}/${year}`;
+};
+
+function secondsToTime(seconds) {
+  const hours = Math.floor(seconds / 3600);
+  seconds %= 3600;
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return [
+    hours.toString().padStart(2, "0"),
+    minutes.toString().padStart(2, "0"),
+    secs.toString().padStart(2, "0"),
+  ].join(":");
+}
+
+function timeToSeconds(time) {
+  const [hours, minutes, seconds] = time.split(":").map(Number);
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+function isBelowMinimumHours(totalTime, minimumHoursWorked) {
+  const totalSeconds = timeToSeconds(totalTime);
+  const minimumSeconds = timeToSeconds(minimumHoursWorked);
+  return totalSeconds < minimumSeconds;
+}
+
 const createConge = async (req, res) => {
-  const minimumHoursWorked = 4;
+  const minimumHoursWorked = "00:00:20";
   try {
-    const { email, dateDebut, dateFin } = req.body;
-    if (!email || !dateDebut || !dateFin) {
+    const { email, dateDebut, dateFin ,typeConge} = req.body;
+    if (!email || !dateDebut || !dateFin || !typeConge) {
       return res.status(404).json({ message: "Tous les champs sont requis !" });
     }
 
@@ -31,36 +62,58 @@ const createConge = async (req, res) => {
         message: "La date de début doit être antérieure à la date de fin.",
       });
     }
-     // Vérification de l'existence d'une demande de congé précédente
-     const existingConge = await Conge.findOne({ email: email, nomPrenom: nomPrenom });
-     if (existingConge) {
-       return res.status(409).json({ message: "Une demande de congé existe déjà pour cet utilisateur." });
-     }
+
+    // Vérification de l'existence d'une demande de congé précédente
+    const existingConge = await Conge.findOne({ email: email });
+    if (existingConge) {
+      return res.status(409).json({
+        message: "Une demande de congé existe déjà pour cet utilisateur.",
+      });
+    }
 
     const nbrConges = await Conge.countDocuments({
-      dateDebut: { $gte: dateDebut, $lte: dateFin },
+      $and: [
+        { dateDebut: { $gte: dateDebut } },
+        { dateFin: { $lte: dateFin } },
+      ],
     });
 
-    const employee = await Employee.find({
-      "entries.fullname": userLoggedIn.fullname,
-    });
+    console.log("nbrConges", nbrConges);
 
-    if (!employee) {
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+
+    const employee = await Employee.aggregate([
+      {
+        $match: {
+          "entries.fullname": userLoggedIn.fullname,
+          $expr: {
+            $gte: [
+              { $dateFromString: { dateString: "$date", format: "%d/%m/%Y" } },
+              threeMonthsAgo,
+            ],
+          },
+        },
+      },
+      { $unwind: "$entries" },
+      { $match: { "entries.fullname": userLoggedIn.fullname } },
+    ]);
+
+    if (employee.length == 0) {
       return res.status(404).json({ message: "Employé n'existe pas." });
     }
 
-    // Calculate hoursWorked for the employee
-    const totalHoursWorked = employee.entries.reduce((total, entry) => {
-      const entryHours = entry.hoursWorked.split(":");
-      total +=
-        parseInt(entryHours[0]) +
-        parseInt(entryHours[1]) / 60 +
-        parseInt(entryHours[2]) / 3600;
-      return total;
-    }, 0);
+    const totalSeconds = employee
+      .flatMap((record) => record.entries)
+      .map((entry) => timeToSeconds(entry.hoursWorked))
+      .reduce((acc, seconds) => acc + seconds, 0);
+
+    const totalTime = secondsToTime(totalSeconds);
+
+    console.log(`Total hours worked: ${totalTime}`);
 
     // Assuming the employee can take a maximum of 5 conges
-    if (nbrConges >= 5 || totalHoursWorked < minimumHoursWorked) {
+    if (nbrConges > 5 || isBelowMinimumHours(totalTime, minimumHoursWorked)) {
       return res.status(400).json({
         message:
           "Vous n'êtes pas autorisé à prendre un congé pour cette période.",
@@ -72,6 +125,8 @@ const createConge = async (req, res) => {
       email,
       dateDebut,
       dateFin,
+      hoursWorked: totalTime,
+      typeConge
     });
 
     await conge.save();
@@ -88,7 +143,7 @@ const createConge = async (req, res) => {
 const modifierConge = async (req, res) => {
   try {
     const { email, nomPrenom, NVdateDebut, NVdateFin } = req.body;
-    
+
     // Vérifier si tous les champs nécessaires sont présents
     if (!nomPrenom || !email || !NVdateDebut || !NVdateFin) {
       return res.status(404).json({ message: "Tous les champs sont requis !" });
@@ -96,18 +151,28 @@ const modifierConge = async (req, res) => {
 
     // Trouver l'utilisateur connecté pour vérifier son autorisation
     const userLoggedIn = await User.findOne({ email: email });
-    if (!userLoggedIn || userLoggedIn.fullname.trim().toLowerCase() !== nomPrenom.trim().toLowerCase()) {
+    if (
+      !userLoggedIn ||
+      userLoggedIn.fullname.trim().toLowerCase() !==
+        nomPrenom.trim().toLowerCase()
+    ) {
       return res.status(401).json({ message: "Utilisateur non autorisé." });
     }
 
     // Vérifier la validité des nouvelles dates
     if (!validateDates(NVdateDebut, NVdateFin)) {
-      return res.status(400).json({ message: "Les dates ne sont pas valides." });
+      return res
+        .status(400)
+        .json({ message: "Les dates ne sont pas valides." });
     }
 
     // Vérifier que la nouvelle date de début est avant la nouvelle date de fin
-    if (moment(NVdateDebut, "DD/MM/YYYY").isAfter(moment(NVdateFin, "DD/MM/YYYY"))) {
-      return res.status(400).json({ message: "La date de début doit être antérieure à la date de fin." });
+    if (
+      moment(NVdateDebut, "DD/MM/YYYY").isAfter(moment(NVdateFin, "DD/MM/YYYY"))
+    ) {
+      return res.status(400).json({
+        message: "La date de début doit être antérieure à la date de fin.",
+      });
     }
 
     // Rechercher le congé existant avec le nom, prénom et email
@@ -118,7 +183,9 @@ const modifierConge = async (req, res) => {
 
     // Si aucun congé correspondant n'est trouvé
     if (!congeExistant) {
-      return res.status(404).json({ message: "Aucun congé correspondant trouvé." });
+      return res
+        .status(404)
+        .json({ message: "Aucun congé correspondant trouvé." });
     }
 
     // Si un congé correspondant est trouvé, procéder à la mise à jour des dates
@@ -130,7 +197,9 @@ const modifierConge = async (req, res) => {
     res.status(200).json({ message: "Congé modifié avec succès." });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Erreur lors de la modification du congé." });
+    res
+      .status(500)
+      .json({ message: "Erreur lors de la modification du congé." });
   }
 };
 const supprimerConge = async (req, res) => {
@@ -147,7 +216,9 @@ const supprimerConge = async (req, res) => {
 
     // Si aucun congé correspondant n'est trouvé
     if (!conge) {
-      return res.status(404).json({ message: "Aucun congé correspondant trouvé." });
+      return res
+        .status(404)
+        .json({ message: "Aucun congé correspondant trouvé." });
     }
 
     // Si un congé correspondant est trouvé, procéder à la suppression
@@ -155,13 +226,15 @@ const supprimerConge = async (req, res) => {
     res.status(200).json({ message: "Congé supprimé avec succès." });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Erreur lors de la suppression du congé." });
+    res
+      .status(500)
+      .json({ message: "Erreur lors de la suppression du congé." });
   }
 };
 
 const verifierConge = async (req, res) => {
   try {
-    const { email , nomPrenom, dateDebut, dateFin} = req.body;
+    const { email, nomPrenom, dateDebut, dateFin } = req.body;
     console.log(email);
     const updated = await Conge.findOneAndUpdate(
       { email },
@@ -170,7 +243,7 @@ const verifierConge = async (req, res) => {
     );
     console.log(updated);
     /* envoyer email */
-    sendNewConge(nomPrenom, email, dateDebut, dateFin); 
+    sendNewConge(nomPrenom, email, dateDebut, dateFin);
 
     res.status(200).json({ message: " conge confirmé " });
   } catch (error) {
@@ -256,4 +329,11 @@ function validateDates(dateDebut, dateFin) {
   );
 }
 
-export { createConge, modifierConge, getVacationData,supprimerConge, verifierConge,employesConge };
+export {
+  createConge,
+  modifierConge,
+  getVacationData,
+  supprimerConge,
+  verifierConge,
+  employesConge,
+};

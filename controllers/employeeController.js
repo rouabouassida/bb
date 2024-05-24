@@ -8,23 +8,39 @@ const ERROR_SERVER = "Erreur du serveur.";
 const STATUS_USER_NOT_FOUND = 404;
 const STATUS_SERVER_ERROR = 500;
 const STATUS_CREATED = 201;
+const formatTime = () => moment().format("HH:mm:ss");
+const formatDate = () => moment().format("DD/MM/YYYY");
 // Fonction pour formater l'heure au format "hh:mm:ss"
-const formatTime = () => {
+/* const formatTime2 = () => {
   const now = new Date();
   const hours = String(now.getHours()).padStart(2, "0");
   const minutes = String(now.getMinutes()).padStart(2, "0");
   const seconds = String(now.getSeconds()).padStart(2, "0");
   return `${hours}:${minutes}:${seconds}`;
-};
+}; */
 
 // Fonction pour formater la date au format "jj/mm/aaaa"
-const formatDate = () => {
+/* const formatDate = () => {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${day}/${month}/${year}`;
+}; */
+
+const timeStringToSeconds = (timeString) => {
+  const [hours, minutes, seconds] = timeString.split(":").map(Number);
+  return hours * 3600 + minutes * 60 + seconds;
 };
+
+// Fonction pour convertir un nombre de secondes en format "hh:mm:ss"
+const secondsToTimeString = (totalSeconds) => {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+};
+
 
 export const createEmployee = async (req, res) => {
   const { email } = req.body;
@@ -60,6 +76,7 @@ const formatTime1 = () => {
   const now = new Date();
   return moment(now).format("HH:mm:ss");
 };
+const formatDate1 = () => moment().format("DD/MM/YYYY");
 
 /* // Fonction pour formater la date au format "jj/mm/aaaa"
 const formatDate1 = () => {
@@ -125,45 +142,6 @@ export const createEntry = async (req, res) => {
   }
 };
 
-export const calculateHoursWorked = async (req, res) => {
-  const { nomPrenom } = req.body;
-  try {
-    // Date d'il y a trois mois
-    const threeMonthsAgo = new Date();
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-
-    // Formatage de la date au format "jj/mm/aaaa"
-    const formattedThreeMonthsAgo = formatDate(threeMonthsAgo);
-
-    const employee = await Employee.find({
-      "entries.fullname": nomPrenom,
-    });
-
-    if (!employee) {
-      return res.status(404).json({ message: "Employé n'est pas travaille." });
-    }
-
-    // Calculate hoursWorked for the employee
-   /*  const totalHoursWorked = employee.entries.reduce((total, entry) => {
-      const entryHours = entry.hoursWorked.split(":");
-      total +=
-        parseInt(entryHours[0]) +
-        parseInt(entryHours[1]) / 60 +
-        parseInt(entryHours[2]) / 3600;
-      return total;
-    }, 0);
-
-    // Afficher le résultat
-    console.log(
-      "Hours worked for each nomPrenom in the last three months:",
-      totalHoursWorked
-    );
-    return totalHoursWorked; */
-  } catch (error) {
-    console.error("Error calculating hours worked:", error);
-    throw error;
-  }
-};
 
 /* // Fonction pour calculer les heures travaillées pour un employé depuis une date donnée
 const calculateTotalHoursWorked = (employeeData, fromDate) => {
@@ -183,9 +161,52 @@ const calculateHours = (hoursString) => {
   const [hours, minutes, seconds] = hoursString.split(":").map(Number);
   return hours + minutes / 60 + seconds / 3600;
 };
-
-// Contrôleur pour mettre à jour l'heure de sortie et les heures travaillées
 export const updateExitTimeAndHoursWorked = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { exitTime, hoursWorked } = req.body;
+
+    if (exitTime === undefined || hoursWorked === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: "exitTime and hoursWorked are required",
+      });
+    }
+
+    const entry = await Employee.findOne(
+      { "entries._id": id });
+
+      // Convertir les temps en secondes
+    const lastTimeInSeconds = timeStringToSeconds(entry.entries[0].hoursWorked);
+    const entryHoursWorkedInSeconds = timeStringToSeconds(hoursWorked);
+    const totalHoursWorkedInSeconds = entryHoursWorkedInSeconds + lastTimeInSeconds;
+
+    // Convertir le total des secondes en format "hh:mm:ss"
+    const totalHoursWorked = secondsToTimeString(totalHoursWorkedInSeconds);
+
+    const updatedEntry = await Employee.findOneAndUpdate(
+      { "entries._id": id },
+      {
+        $set: {
+          "entries.$.exitTime": exitTime,
+          "entries.$.hoursWorked": totalHoursWorked,
+        },
+      },
+      { new: true }
+    );
+
+    if (!updatedEntry) {
+      return res.status(404).json({ success: false, error: "No entry found for the provided ID" });
+    }
+
+    res.status(200).json({ success: true, data: updatedEntry });
+  } catch (err) {
+    console.error("Error updating data:", err);
+    res.status(500).json({ success: false, error: "Server error while updating data" });
+  }
+}
+// Contrôleur pour mettre à jour l'heure de sortie et les heures travaillées
+/* export const updateExitTimeAndHoursWorked = async (req, res) => {
   try {
     const { id } = req.params;
     const { exitTime, hoursWorked } = req.body;
@@ -224,7 +245,7 @@ export const updateExitTimeAndHoursWorked = async (req, res) => {
       .status(500)
       .json({ success: false, error: "Server error while updating data" });
   }
-};
+}; */
 export const getEmployeesPresentiel = async (req, res) => {
   try {
     // Obtenez la date actuelle au format "JJ/MM/AAAA"
@@ -341,5 +362,33 @@ export const getEmployeeInfoForToday = async (req, res) => {
     res.status(500).json({ error: "Une erreur s'est produite lors de la récupération des informations de l'employé" });
   }
 };
+export const getActiveEmployee = async (req, res) => {
+  const { fullname } = req.body;
+  try {
+    const currentDate = formatDate1();
+
+    if(!fullname){
+      res.status(404).json({ message: "fullname is required" });
+    }
+
+    const employee = await Employee.findOne({
+      date: currentDate,
+      "entries.fullname": fullname, // Rechercher le nom complet dans les entrées existantes
+    });
+    console.log("employee", employee)
+
+    if (!employee) {
+      console.log("employee not found")
+      return res.status(400).json({ message: "Employee not found" });
+    }
+    console.log("employee exist")
+    console.log(employee)
+    return res.status(200).json({ entry: employee.entries, message: "Employee exist" });
+  } catch (error) {
+    console.error("Error finding active employee:", error);
+    return res.status(500).json({ messsage: "Internal server error" });
+  }
+};
+
 
 

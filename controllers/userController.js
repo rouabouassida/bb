@@ -4,6 +4,8 @@ import { InhashData, hashData, compareHash } from "../helpers/bcrypt.js";
 import jwt from "jsonwebtoken";
 import createToken from "../helpers/createToken.js";
 
+
+
 const login = async (req, res) => {
   const { email, password } = req.body;
 
@@ -209,6 +211,7 @@ const storeEmail = async (email) => {
   }
 };
 
+
 const editPassword = async (req, res) => {
   const { userId, currentPassword, newPassword } = req.body;
 
@@ -223,8 +226,7 @@ const editPassword = async (req, res) => {
       return res.status(404).json({ message: "Utilisateur non trouvé" });
     }
 
-    // Vérifie si le mot de passe actuel correspond au mot de passe stocké
-    const isPasswordMatch = await comparePassword(currentPassword, user.password);
+    const isPasswordMatch = InhashData(newPassword, user.password);
 
     if (!isPasswordMatch) {
       return res.status(400).json({ message: "Mot de passe actuel incorrect" });
