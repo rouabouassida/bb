@@ -2,6 +2,7 @@ import moment from "moment";
 import Employee from "../models/Employee.js";
 import User from "../models/user.js";
 import Conge from "../models/conge.js";
+import RemoteJob from "../models/remoteJob.js";
 
 const ERROR_USER_NOT_FOUND = "Utilisateur non trouvé.";
 const ERROR_SERVER = "Erreur du serveur.";
@@ -89,10 +90,11 @@ export const createEntry = async (req, res) => {
   try {
     const { entryTime, workMode, fullname } = req.body;
 
+    // Vérification des données requises
     if (!entryTime || !workMode || !fullname) {
-      return res.status(401).json({
+      return res.status(400).json({
         success: false,
-        error: "EntryTime , WorkMode and fullname are required",
+        error: "EntryTime, WorkMode and Fullname are required",
       });
     }
 
@@ -113,54 +115,62 @@ export const createEntry = async (req, res) => {
     // Création d'une nouvelle entrée avec le travailMode, fullname et la date d'aujourd'hui
     const newEntry = {
       workMode,
-      fullname, // Utilize the fullname retrieved here
-      entryTime, // Using the current time when creating the entry
-      exitTime: "", // The exit time will be updated later
-      hoursWorked: "00:00:00", // Initialized to 0
+      fullname,
+      entryTime,
+      exitTime: "",
+      hoursWorked: "00:00:00",
     };
 
-    // Adding the new entry to the existing entry for the current date
+    // Si le mode de travail est "remote", vérifier s'il y a une demande remote valide pour cet employé aujourd'hui
+    if (workMode === "remote") {
+      const isRemoteValidated = await isRemoteValidatedForToday(fullname, currentDate);
+
+      if (!isRemoteValidated) {
+        return res.status(401).json({
+          success: false,
+          message: "Remote work is not validated for today",
+        });
+      }
+    }
+
+    // Ajout de la nouvelle entrée à l'entrée existante pour la date actuelle
     existingEntry.entries.push(newEntry);
 
-    // Saving the employee's modifications in the database
-    const UpdatedEmployee = await existingEntry.save();
-
-    // Retrieving the ID of the newly added entry
-    const idEntry =
-      UpdatedEmployee.entries[UpdatedEmployee.entries.length - 1]._id;
+    // Sauvegarde des modifications de l'employé dans la base de données
+    const updatedEmployee = await existingEntry.save();
 
     // Renvoyer une réponse avec les données de l'entrée créée
-    res
-      .status(STATUS_CREATED)
-      .json({ success: true, data: { ...newEntry, _id: idEntry } });
+    res.status(201).json({
+      success: true,
+      data: { ...newEntry, _id: updatedEmployee.entries[updatedEmployee.entries.length - 1]._id },
+    });
   } catch (err) {
     // Renvoyer une réponse d'erreur en cas de problème
     console.error("Erreur lors de la création de l'entrée :", err);
-    res
-      .status(STATUS_SERVER_ERROR)
-      .json({ success: false, error: ERROR_SERVER });
+    res.status(500).json({ success: false, error: "Internal Server Error" });
   }
 };
 
+export const isRemoteValidatedForToday = async (fullname, currentDate) => {
+  try {
+    // Recherche de la demande remote pour l'employé avec le nom complet fourni
+    // et pour la date actuelle
+    const remoteRequest = await RemoteJob.findOne({
+      nomPrenom: fullname,
+      dateDebut: { $lte: currentDate }, // La demande commence avant ou le même jour que currentDate
+      dateFin: { $gte: currentDate }, // La demande se termine après ou le même jour que currentDate
+      verified: true, // La demande est vérifiée
+    });
 
-/* // Fonction pour calculer les heures travaillées pour un employé depuis une date donnée
-const calculateTotalHoursWorked = (employeeData, fromDate) => {
-  let totalHoursWorked = 0;
-  employeeData.date.forEach((entry) => {
-    if (new Date(entry.date) >= fromDate) {
-      entry.entries.forEach((e) => {
-        totalHoursWorked += calculateHours(e.hoursWorked);
-      });
-    }
-  });
-  return totalHoursWorked;
-}; */
-
-// Fonction pour convertir le format d'heures en nombre total d'heures
-const calculateHours = (hoursString) => {
-  const [hours, minutes, seconds] = hoursString.split(":").map(Number);
-  return hours + minutes / 60 + seconds / 3600;
+    // Si une demande remote est trouvée et qu'elle est vérifiée, retourner true
+    return remoteRequest !== null;
+  } catch (err) {
+    // En cas d'erreur lors de la recherche de la demande remote, renvoyer false
+    console.error("Erreur lors de la vérification de la demande remote :", err);
+    return false;
+  }
 };
+
 export const updateExitTimeAndHoursWorked = async (req, res) => {
   try {
     const { id } = req.params;
@@ -362,6 +372,7 @@ export const getEmployeeInfoForToday = async (req, res) => {
     res.status(500).json({ error: "Une erreur s'est produite lors de la récupération des informations de l'employé" });
   }
 };
+
 export const getActiveEmployee = async (req, res) => {
   const { fullname } = req.body;
   try {

@@ -9,7 +9,8 @@ import {
   getEmployeesRemote,
   getAllEmployees,
   getEmployeeInfoForToday,
-  getActiveEmployee
+  getActiveEmployee,
+  isRemoteValidatedForToday
 } from "../controllers/employeeController.js";
 import { authenticateUser } from "../middlewares/auth.js";
 
@@ -22,6 +23,9 @@ router.get("/remote", getEmployeesRemote);
 router.get("/getAllEmployees", getAllEmployees); // Nouvelle route pour récupérer tous les employés
 router.get("/getEmployeeInfoForToday/:name", getEmployeeInfoForToday); // Nouvelle route pour récupérer tous les employés
 router.post("/getActiveEmployee", getActiveEmployee);
+router.post("/isRemoteValidatedForToday", isRemoteValidatedForToday);
+
+
 
 // Exporter le routeur
 export default router;

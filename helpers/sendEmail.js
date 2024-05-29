@@ -57,6 +57,35 @@ const sendNewConge = async ( nomPrenom,  email,  dateDebut,  dateFin) => {
     console.error("Error sending email:", error);
   }
 };
+
+const sendNewRemote = async (nomPrenom, email, dateDebut, dateFin) => {
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: "wafasassi49@gmail.com",
+        pass: "xywgeetxyqcqpogd",
+      },
+    });
+
+    const mailOptions = {
+      from: "votre_email@gmail.com",
+      to: email,
+      subject: "Your Account Information",
+      html: `<p>Hello ${nomPrenom},</p>
+      <p>Votre demande de travail à distance pour la période du ${dateDebut} au ${dateFin} a été approuvée. Bon travail !</p>
+      <p>Cordialement,</p>
+      <p>Your Company</p>`,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log("Email sent successfully.");
+  } catch (error) {
+    console.error("Error sending email:", error);
+  }
+};
+
+
 const sendPasswordReset = (email, password) => {
   
 const transporter = nodemailer.createTransport({
@@ -117,4 +146,4 @@ const sendUpdateInfo = async (email, name, password) => {
   }
 };
 
-export { sendNewAccountInfo, sendUpdateInfo,sendNewConge ,sendPasswordReset};
+export { sendNewAccountInfo, sendUpdateInfo,sendNewConge ,sendPasswordReset ,sendNewRemote};

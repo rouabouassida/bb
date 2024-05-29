@@ -18,6 +18,7 @@ const submitRemoteJob = async (req, res) => {
     }
 
     const userLoggedIn = await User.findOne({ email: email });
+    
     if (!userLoggedIn || !userLoggedIn.fullname || userLoggedIn.fullname.trim().toLowerCase() !== nomPrenom.trim().toLowerCase()) {
       return res.status(401).json({ message: "Utilisateur non autorisé ou nom/prénom incorrect." });
     }
@@ -85,7 +86,7 @@ const getRemoteData = async (req, res) => {
 };
 const verifierRemote = async (req, res) => {
   try {
-    const { email, nomPrenom, date } = req.body;
+    const { email, nomPrenom, dateDebut,dateFin } = req.body;
     console.log(email);
     const updated = await RemoteJob.findOneAndUpdate(
       { email },
@@ -94,7 +95,7 @@ const verifierRemote = async (req, res) => {
     );
     console.log(updated);
     /* envoyer email */
-    sendNewRemote(nomPrenom, email, date);
+    sendNewRemote(nomPrenom, email, dateDebut,dateFin);
 
     res.status(200).json({ message: " remote confirmé " });
   } catch (error) {
