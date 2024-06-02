@@ -14,15 +14,23 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  verified: {
+    type: Boolean,
+    default: true,
+  },
 });
 
-// Ajouter une méthode personnalisée pour supprimer un utilisateur par email
-userSchema.statics.deleteByEmail = async function (email) {
+// Ajouter une méthode personnalisée pour marquer un utilisateur comme non vérifié par email
+userSchema.statics.unverifyByEmail = async function (email) {
   try {
-    const deletedUser = await this.findOneAndDelete({ email });
-    return deletedUser;
+    const updatedUser = await this.findOneAndUpdate(
+      { email },
+      { verified: false },
+      { new: true } // Retourne le document après la mise à jour
+    );
+    return updatedUser;
   } catch (error) {
-    throw new Error("Erreur lors de la suppression de l'utilisateur :", error);
+    throw new Error(`Erreur lors de la mise à jour de l'utilisateur : ${error.message}`);
   }
 };
 

@@ -20,28 +20,30 @@ const login = async (req, res) => {
       return res.status(404).json({ message: "Email incorrect" });
     }
 
+    // Vérifiez si l'utilisateur est vérifié
+    if (!foundedUser.verified) {
+      return res.status(403).json({ message: "Utilisateur non vérifié. Veuillez contacter l'administrateur." });
+    }
+
     const isPasswordMatch = await compareHash(password, foundedUser.password);
     if (!isPasswordMatch) {
-      return res
-        .status(400)
-        .send({ error: "Informations de connexion invalides" });
+      return res.status(400).send({ error: "Informations de connexion invalides" });
     }
 
     const token = createToken(foundedUser._id, foundedUser.fullname);
 
-    res
-      .status(200)
-      .json({
-        token,
-        email: foundedUser.email,
-        fullname: foundedUser.fullname,
-        _id: foundedUser._id,
-      });
+    res.status(200).json({
+      token,
+      email: foundedUser.email,
+      fullname: foundedUser.fullname,
+      _id: foundedUser._id,
+    });
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: "Erreur interne du serveur" });
   }
 };
+
 const rhAccount = async (req, res) => {
   const { email } = req.body;
 
@@ -116,41 +118,30 @@ const ajouterEmploye = async (req, res) => {
 
 const modifierEmploye = async (req, res) => {
   // Récupération des données de la requête
-  const { name, email, password } = req.body;
+  const { fullname, email } = req.body;
 
   try {
-    // Recherche de l'utilisateur dans la base de données par son adresse e-mail
-    const existingUser = await User.findOne({ email });
+    // Recherche de l'utilisateur dans la base de données par son nom
+    const existingUser = await User.findOne({ fullname });
     if (!existingUser) {
       return res.status(404).json({ message: "Utilisateur non trouvé !" });
     }
 
-    // Hash du nouveau mot de passe
-    const hashedPassword = await hashData(password);
-
-    // Mise à jour des informations de l'utilisateur
-    existingUser.name = name;
-    existingUser.password = hashedPassword;
+    // Mise à jour de l'email de l'utilisateur
+    existingUser.email = email;
 
     // Enregistrement des modifications dans la base de données
     await existingUser.save();
 
-    // Envoi des informations mises à jour par email
-    sendUpdateInfo(email, name, password); // Assurez-vous d'adapter la fonction sendAccountInfo pour qu'elle envoie un nouvel email avec les informations mises à jour
-
     // Réponse réussie
-    return res
-      .status(200)
-      .json({ message: "Informations de l'employé modifiées avec succès !" });
+    return res.status(200).json({ message: "Email de l'employé modifié avec succès !" });
   } catch (error) {
-    console.error(
-      "Erreur lors de la modification des informations de l'employé :",
-      error
-    );
+    console.error("Erreur lors de la modification de l'email de l'employé :", error);
     return res.status(500).json({ message: "Erreur interne du serveur." });
   }
 };
-const supprimerEmploye = async (req, res) => {
+
+/* const supprimerEmploye = async (req, res) => {
   const { email } = req.query;
 
   try {
@@ -170,7 +161,7 @@ const supprimerEmploye = async (req, res) => {
     console.error("Erreur lors de la suppression de l'utilisateur :", error);
     return res.status(500).json({ message: "Erreur interne du serveur" });
   }
-};
+}; */
 const getUserEmail = async (req, res) => {
   try {
     // Vérifiez si le token JWT est présent dans les en-têtes de la requête
@@ -304,7 +295,25 @@ const ForgetPassword = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+const supprimerEmploye = async (req, res) => {
+  const { email } = req.query;
 
+  if (!email) {
+    return res.status(400).send("Email est requis.");
+  }
+
+  try {
+    const user = await User.unverifyByEmail(email);
+
+    if (user) {
+      res.status(200).send(`L'utilisateur avec l'email ${email} a été marqué comme non vérifié.`);
+    } else {
+      res.status(404).send("Utilisateur non trouvé.");
+    }
+  } catch (error) {
+    res.status(500).send(`Erreur lors de la mise à jour de l'utilisateur : ${error.message}`);
+  }
+};
 
 export {
   storeEmail,
